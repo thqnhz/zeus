@@ -78,18 +78,21 @@ static void tokenize() {
             break;
         default:
             if (is_number(c)) {
-                printf("Number: %c\n", c);
+                int start = cursor;
+                while (is_number(src[cursor])) cursor++;
+                printf("Number: %.*s\n", cursor - start, src + start);
             } else if (is_alpha(c)) {
-                printf("Identifier: %c\n", c);
+                int start = cursor;
+                while (is_alpha(src[cursor])) cursor++;
+                printf("Identifier: %.*s\n", cursor - start, src + start);
             } else {
                 printf("Unknown token: %c\n", c);
             }
-            break;
+            continue;
         }
         cursor++;
     }
 }
-
 
 int main(int argc, char **argv) {
     if (argc < 2) {
