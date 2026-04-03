@@ -1,6 +1,4 @@
-v x = 10;
-
 f main() {
-    print(x);
+    print("Hello, world!");
 }
 
