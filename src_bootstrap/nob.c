@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
 
     Nob_Cmd cmd = {0};
     nob_cmd_append(&cmd, "gcc", SRC_DIR"zeus.c", "-o", BUILD_DIR BINARY);
-    if (strcmp(build_mode, "-r")) nob_cmd_append(&cmd, "-ggdb", "-O0");
+    if (strcmp(build_mode, "-r")) nob_cmd_append(&cmd, "-Wall", "-Wextra", "-ggdb", "-O0");
     else nob_cmd_append(&cmd, "-O3");
 
     if (!nob_cmd_run_sync(cmd)) return 1;
