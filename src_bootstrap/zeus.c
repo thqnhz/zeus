@@ -69,10 +69,11 @@ typedef struct Tokens {
 } Tokens;
 
 typedef struct Expr {
-    enum { E_Lit, E_V, E_Bin, E_Un, E_Call, } kind;
+    enum { E_Lit, E_Str, E_V, E_Bin, E_Un, E_Call, } kind;
     union {
         float lit;
         char *var;
+        char *str;
         struct { struct Expr *lhs, *rhs; Token op; } bin;
         struct { Token op; struct Expr *rhs; } un;
         // TODO: multiple args passing
@@ -103,10 +104,60 @@ typedef struct Prog {
     Fn **fns;
     size_t fn_count;
     size_t fn_cap;
-    struct { char *name; Expr *init; } *glb;
+    struct { char *name; Expr *init; } *glbs;
     size_t glb_count;
     size_t glb_cap;
 } Prog;
+
+typedef enum OpKind {
+    O_Const,
+    O_Tmp,
+    O_Var,
+    O_Str,
+} OpKind;
+
+typedef struct IROp {
+    OpKind kind;
+    union {
+        float constant;
+        int tmp_id;
+        char *name;
+        char *str;
+    } v;
+} IROp;
+
+typedef enum IRKind {
+    I_LoadConst, I_LoadStr, I_LoadVar, I_StoreVar,
+    I_Add, I_Sub, I_Mul, I_Div,
+    I_Neg, I_Call, I_Print, I_Ret, I_Exit,
+} IRKind;
+
+typedef struct IRInstruction {
+    IRKind kind;
+    IROp dest;
+    IROp l;
+    IROp r;
+    char *fn_name;
+    IROp call_arg;
+} IRInst;
+
+typedef struct IRFn {
+    char *name;
+    char *param;
+    IRInst *inst;
+    size_t count;
+    size_t cap;
+    int next_tmp;
+} IRFn;
+
+typedef struct IRProg {
+    IRFn *fns;
+    size_t count;
+    size_t cap;
+    struct { char *name; float val; } *glbs;
+    size_t glb_count;
+    size_t glb_cap;
+} IRProg;
 
 typedef struct Kws {
     const char *name;
@@ -139,6 +190,8 @@ const char *source_path;
 
 Tokens tokens = {0};
 Prog prog = {0};
+IRProg ir = {0};
+IRFn *curr_fn = NULL;
 
 char *src;
 int cursor = 0;
@@ -250,6 +303,19 @@ static void tokenize() {
         case '>':
             add_token(TT_Gt, ">");
             break;
+        case '"': {
+            int start = cursor;
+            int start_col = col;
+            advance();
+            while (src[cursor] != '"' && src[cursor] != '\0') advance();
+            advance();
+            int len = cursor - start - 2;
+            char buf[len + 1];
+            memcpy(buf, src + start + 1, len);
+            buf[len] = '\0';
+            add_token_(TT_Str, strdup(buf), line, start_col);
+            continue;
+        }
         default:
             if (is_number(c)) {
                 int start = cursor;
@@ -330,6 +396,13 @@ static Expr *parse_primary() {
         Expr *e = new_expr();
         e->kind = E_Lit;
         e->v.lit = atof(t.lexeme);
+        return e;
+    }
+    if (t.type == TT_Str) {
+        advance_token();
+        Expr *e = new_expr();
+        e->kind = E_Str;
+        e->v.str = strdup(t.lexeme);
         return e;
     }
     if (t.type == TT_LP) {
@@ -497,15 +570,226 @@ static void parse() {
             expect(TT_Semi, " expected ';' after variable declaration");
             if (prog.glb_count >= prog.glb_cap) {
                 prog.glb_cap = prog.glb_cap ? prog.glb_cap * 2 : 8;
-                prog.glb = realloc(prog.glb, prog.glb_cap * sizeof(*prog.glb));
+                prog.glbs = realloc(prog.glbs, prog.glb_cap * sizeof(*prog.glbs));
             }
-            prog.glb[prog.glb_count].name = strdup(name.lexeme);
-            prog.glb[prog.glb_count].init = init;
+            prog.glbs[prog.glb_count].name = strdup(name.lexeme);
+            prog.glbs[prog.glb_count].init = init;
             prog.glb_count++;
         } else {
             error_at_current("expected 'f' or 'v' at top level");
             sync_();
         }
+    }
+}
+
+static IROp op_const(float v) {
+    return (IROp){ O_Const, .v.constant = v };
+}
+
+static IROp op_str(const char *s) {
+    return (IROp){ O_Str, .v.str = strdup(s) };
+}
+
+static IROp op_tmp(int id) {
+    return (IROp){ O_Tmp, .v.tmp_id = id };
+}
+
+static IROp op_var(const char *name) {
+    return (IROp){ O_Var, .v.name = strdup(name) };
+}
+
+static void emit(IRKind kind, IROp dst, IROp lhs, IROp rhs) {
+    if (curr_fn->count >= curr_fn->cap) {
+        curr_fn->cap = curr_fn->cap ? curr_fn->cap * 2 : 8;
+        curr_fn->inst = realloc(curr_fn->inst, curr_fn->cap * sizeof(IRInst));
+    }
+    curr_fn->inst[curr_fn->count++] = (IRInst){
+        .kind = kind,
+        .dest = dst,
+        .l = lhs,
+        .r = rhs
+    };
+}
+
+static int new_tmp() { return curr_fn->next_tmp++; }
+
+static IROp lower_expr(Expr *e) {
+    switch (e->kind) {
+    case E_Lit: {
+        int t = new_tmp();
+        emit(I_LoadConst, op_tmp(t), op_const(e->v.lit), (IROp){0});
+        return op_tmp(t);
+    }
+    case E_Str: {
+        int t = new_tmp();
+        emit(I_LoadStr, op_tmp(t), op_str(e->v.str), (IROp){0});
+        return op_tmp(t);
+    }
+    case E_V: {
+        int t = new_tmp();
+        emit(I_LoadVar, op_tmp(t), op_var(e->v.var), (IROp){0});
+        return op_tmp(t);
+    }
+    case E_Bin: {
+        IROp l = lower_expr(e->v.bin.lhs);
+        IROp r = lower_expr(e->v.bin.rhs);
+        int t = new_tmp();
+        IRKind op;
+        switch (e->v.bin.op.type) {
+        case TT_Plus: op = I_Add; break;
+        case TT_Minus: op = I_Sub; break;
+        case TT_Star: op = I_Mul; break;
+        case TT_Slash: op = I_Div; break;
+        default: op = I_Add; break;
+        }
+        emit(op, op_tmp(t), l, r);
+        return op_tmp(t);
+    }
+    case E_Un: {
+        IROp r = lower_expr(e->v.un.rhs);
+        int t = new_tmp();
+        emit(I_Neg, op_tmp(t), r, (IROp){0});
+        return op_tmp(t);
+    }
+    case E_Call: {
+        IROp arg = e->v.call.args ? lower_expr(e->v.call.args) : (IROp){0};
+        int t = new_tmp();
+        IRInst inst = {
+            .kind = I_Call,
+            .dest = op_tmp(t),
+            .fn_name = strdup(e->v.call.name),
+            .call_arg = arg,
+        };
+        if (curr_fn->count >= curr_fn->cap) {
+            curr_fn->cap = curr_fn->cap ? curr_fn->cap * 2 : 8;
+            curr_fn->inst = realloc(curr_fn->inst, curr_fn->cap * sizeof(IRInst));
+        }
+        curr_fn->inst[curr_fn->count++] = inst;
+        return op_tmp(t);
+    }
+    }
+    return (IROp){0};
+}
+
+static void lower_stmt(Stmt *s) {
+    switch (s->kind) {
+    case S_V: {
+        IROp val = lower_expr(s->v.var.init);
+        emit(I_StoreVar, (IROp){0}, val, op_var(s->v.var.name));
+        break;
+    }
+    case S_Ret: {
+        IROp val = lower_expr(s->v.ret);
+        emit(I_Ret, val, (IROp){0}, (IROp){0});
+        break;
+    }
+    case S_Print: {
+        if (s->v.print->kind == E_Str) {
+            IROp val = lower_expr(s->v.print);
+            emit(I_Print, val, (IROp){0}, (IROp){0});
+        } else {
+            IROp val = lower_expr(s->v.print);
+            emit(I_Print, val, (IROp){0}, (IROp){0});
+        }
+        break;
+    }
+    case S_Exit: {
+        IROp val = lower_expr(s->v.exit);
+        emit(I_Exit, val, (IROp){0}, (IROp){0});
+        break;
+    }
+    case S_E: {
+        lower_expr(s->v.expr);
+        break;
+    }
+    }
+}
+
+static void lower_fn(Fn *f) {
+    if (ir.count >= ir.cap) {
+        ir.cap = ir.cap ? ir.cap * 2 : 8;
+        ir.fns = realloc(ir.fns, ir.cap * sizeof(IRFn));
+    }
+    IRFn *fn = &ir.fns[ir.count++];
+    fn->name = strdup(f->name);
+    fn->param = f->params ? strdup(f->params) : NULL;
+    fn->inst = NULL;
+    fn->count = 0;
+    fn->cap = 0;
+    fn->next_tmp = 0;
+    curr_fn = fn;
+    for (size_t i = 0; i < f->body_count; ++i) {
+        lower_stmt(f->body[i]);
+    }
+}
+
+static void lower_prog() {
+    for (size_t i = 0; i < prog.glb_count; ++i) {
+        if (ir.glb_count >= ir.glb_cap) {
+            ir.glb_cap = ir.glb_cap ? ir.glb_cap * 2 : 8;
+            ir.glbs = realloc(ir.glbs, ir.glb_cap * sizeof(*ir.glbs));
+        }
+        ir.glbs[ir.glb_count].name = strdup(prog.glbs[i].name);
+        Expr *e = prog.glbs[i].init;
+        if (e && e->kind == E_Lit) {
+            ir.glbs[ir.glb_count].val = e->v.lit;
+        }
+        ir.glb_count++;
+    }
+    for (size_t i = 0; i < prog.fn_count; ++i) {
+        lower_fn(prog.fns[i]);
+    }
+}
+
+static void print_ir() {
+    for (size_t i = 0; i < ir.count; i++) {
+        IRFn *f = &ir.fns[i];
+        printf("FUNC %s(%s)\n", f->name, f->param ? f->param : "");
+        for (size_t j = 0; j < f->count; j++) {
+            IRInst *inst = &f->inst[j];
+            switch (inst->kind) {
+            case I_LoadConst:
+                printf("  t%d = LOAD_CONST %.1f\n", inst->dest.v.tmp_id, inst->l.v.constant);
+                break;
+            case I_LoadVar:
+                printf("  t%d = LOAD_VAR %s\n", inst->dest.v.tmp_id, inst->l.v.name);
+                break;
+            case I_LoadStr:
+                printf("  t%d = LOAD_STR %s\n", inst->dest.v.tmp_id, inst->l.v.str);
+                break;
+            case I_StoreVar:
+                printf("  STORE_VAR %s, t%d\n", inst->r.v.name, inst->l.v.tmp_id);
+                break;
+            case I_Add:
+                printf("  t%d = t%d + t%d\n", inst->dest.v.tmp_id, inst->l.v.tmp_id, inst->r.v.tmp_id);
+                break;
+            case I_Sub:
+                printf("  t%d = t%d - t%d\n", inst->dest.v.tmp_id, inst->l.v.tmp_id, inst->r.v.tmp_id);
+                break;
+            case I_Mul:
+                printf("  t%d = t%d * t%d\n", inst->dest.v.tmp_id, inst->l.v.tmp_id, inst->r.v.tmp_id);
+                break;
+            case I_Div:
+                printf("  t%d = t%d / t%d\n", inst->dest.v.tmp_id, inst->l.v.tmp_id, inst->r.v.tmp_id);
+                break;
+            case I_Neg:
+                printf("  t%d = -t%d\n", inst->dest.v.tmp_id, inst->l.v.tmp_id);
+                break;
+            case I_Call:
+                printf("  t%d = CALL %s(t%d)\n", inst->dest.v.tmp_id, inst->fn_name, inst->call_arg.v.tmp_id);
+                break;
+            case I_Print:
+                printf("  PRINT t%d\n", inst->dest.v.tmp_id);
+                break;
+            case I_Ret:
+                printf("  RET t%d\n", inst->dest.v.tmp_id);
+                break;
+            case I_Exit:
+                printf("  EXIT t%d\n", inst->dest.v.tmp_id);
+                break;
+            }
+        }
+        printf("END\n\n");
     }
 }
 
@@ -538,6 +822,9 @@ int main(int argc, char **argv) {
         printf("\nParsing failed. See errors above.\n");
         return 2;
     }
+
+    lower_prog();
+    print_ir();
     return 0;
 }
 
