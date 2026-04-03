@@ -129,7 +129,7 @@ typedef struct IROp {
 typedef enum IRKind {
     I_LoadConst, I_LoadStr, I_LoadVar, I_StoreVar,
     I_Add, I_Sub, I_Mul, I_Div,
-    I_Neg, I_Call, I_Print, I_Ret, I_Exit,
+    I_Neg, I_Call, I_Print, I_PrintStr, I_Ret, I_Exit,
 } IRKind;
 
 typedef struct IRInstruction {
@@ -158,6 +158,15 @@ typedef struct IRProg {
     size_t glb_count;
     size_t glb_cap;
 } IRProg;
+
+typedef struct ConstPool {
+    float *floats;
+    size_t f_count;
+    size_t f_cap;
+    char **strings;
+    size_t s_count;
+    size_t s_cap;
+} ConstPool;
 
 typedef struct Kws {
     const char *name;
@@ -192,6 +201,7 @@ Tokens tokens = {0};
 Prog prog = {0};
 IRProg ir = {0};
 IRFn *curr_fn = NULL;
+static ConstPool pool = {0};
 
 char *src;
 int cursor = 0;
@@ -686,7 +696,7 @@ static void lower_stmt(Stmt *s) {
     case S_Print: {
         if (s->v.print->kind == E_Str) {
             IROp val = lower_expr(s->v.print);
-            emit(I_Print, val, (IROp){0}, (IROp){0});
+            emit(I_PrintStr, val, (IROp){0}, (IROp){0});
         } else {
             IROp val = lower_expr(s->v.print);
             emit(I_Print, val, (IROp){0}, (IROp){0});
@@ -781,6 +791,9 @@ static void print_ir() {
             case I_Print:
                 printf("  PRINT t%d\n", inst->dest.v.tmp_id);
                 break;
+            case I_PrintStr:
+                printf("  PRINTSTR t%d\n", inst->dest.v.tmp_id);
+                break;
             case I_Ret:
                 printf("  RET t%d\n", inst->dest.v.tmp_id);
                 break;
@@ -790,6 +803,40 @@ static void print_ir() {
             }
         }
         printf("END\n\n");
+    }
+}
+
+static int pool_float(float v) {
+    for (size_t i = 0; i < pool.f_count; ++i) if (pool.floats[i] == v) return i;
+    if (pool.f_count >= pool.f_cap) {
+        pool.f_cap = pool.f_cap ? pool.f_cap * 2 : 8;
+        pool.floats = realloc(pool.floats, pool.f_cap * sizeof(float));
+    }
+    pool.floats[pool.f_count++] = v;
+    return pool.f_count - 1;
+}
+
+static int pool_str(const char *s) {
+    for (size_t i = 0; i < pool.s_count; ++i) if (strcmp(pool.strings[i], s) == 0) return i;
+    if (pool.s_count >= pool.s_cap) {
+        pool.s_cap = pool.s_cap ? pool.s_cap * 2 : 8;
+        pool.strings = realloc(pool.strings, pool.s_cap * sizeof(char *));
+    }
+    pool.strings[pool.s_count++] = strdup(s);
+    return pool.s_count - 1;
+}
+
+static void dedup() {
+    for (size_t i = 0; i < ir.count; ++i) {
+        IRFn *f = &ir.fns[i];
+        for (size_t j = 0; j < f->count; ++j) {
+            IRInst *inst = &f->inst[j];
+            if (inst->kind == I_LoadConst) {
+                pool_float(inst->l.v.constant);
+            } else if (inst->kind == I_LoadStr) {
+                pool_str(inst->l.v.str);
+            }
+        }
     }
 }
 
@@ -824,6 +871,7 @@ int main(int argc, char **argv) {
     }
 
     lower_prog();
+    dedup();
     print_ir();
     return 0;
 }
