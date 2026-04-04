@@ -17,7 +17,13 @@ int main(int argc, char **argv) {
     if (!mkdir_if_not_exists(BUILD_DIR)) return 1;
 
     Nob_Cmd cmd = {0};
-    nob_cmd_append(&cmd, "gcc", SRC_DIR"zeus.c", "-o", BUILD_DIR BINARY);
+    nob_cmd_append(&cmd, "gcc", "-o", BUILD_DIR BINARY,
+        SRC_DIR"zeus.c",
+        SRC_DIR"lexer.c",
+        SRC_DIR"parser.c",
+        SRC_DIR"ir.c",
+        SRC_DIR"codegen.c"
+    );
     if (strcmp(build_mode, "-r")) nob_cmd_append(&cmd, "-Wall", "-Wextra", "-ggdb", "-O0");
     else nob_cmd_append(&cmd, "-O3");
 
