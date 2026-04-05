@@ -107,7 +107,17 @@ static void lower_stmt(Stmt *s) {
         break;
     }
     case S_Print: {
-        if (s->v.print->kind == E_Str) {
+        int is_str = s->v.print->kind == E_Str;
+        if (!is_str && s->v.print->kind == E_V) {
+            for (size_t i = 0; i < prog.glb_count; ++i) {
+                if (strcmp(ir.glbs[i].name, s->v.print->v.var) == 0
+                    && ir.glbs[i].str_idx != -1) {
+                    is_str = 1;
+                    break;
+                }
+            }
+        }
+        if (is_str) {
             IROp val = lower_expr(s->v.print);
             emit(I_PrintStr, val, (IROp){0}, (IROp){0});
         } else {
@@ -249,6 +259,8 @@ void lower_prog() {
         Expr *e = prog.glbs[i].init;
         if (e && e->kind == E_Lit) {
             ir.glbs[ir.glb_count].val = e->v.lit;
+        } else if (e && e->kind == E_Str) {
+            ir.glbs[ir.glb_count].str_idx = pool_str(e->v.str);
         }
         ir.glb_count++;
     }

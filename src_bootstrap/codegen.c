@@ -11,17 +11,44 @@ static void get_dir(const char *path, char *dir, size_t size) {
     } else snprintf(dir, size, ".");
 }
 
+static int temp_off(int id) { return (id + 1) * 8; }
+
 static void emit_inst(FILE *f, IRInst *i) {
-    if (i->kind == I_LoadStr) {
+    switch (i->kind) {
+    case I_LoadStr: {
         fprintf(f, "  mov rdi, const_s%d\n", pool_str(i->l.v.str));
-    } else if (i->kind == I_PrintStr) {
+        break;
+    }
+    case I_LoadVar: {
+        int is_str_glb = 0;
+        for (size_t j = 0; j < prog.glb_count; ++j) {
+            if (strcmp(i->l.v.name, prog.glbs[j].name) == 0) {
+                is_str_glb = ir.glbs[j].str_idx != -1;
+                break;
+            }
+        }
+        if (is_str_glb) {
+            fprintf(f, "  mov rax, [rel %s]\n", i->l.v.name);
+            fprintf(f, "  mov [rbp-%d], rax\n", temp_off(i->dest.v.tmp_id));
+        } else {
+            fprintf(f, "  movsd xmm0, [rel %s]\n", i->l.v.name);
+            fprintf(f, "  movsd [rbp-%d], xmm0\n", temp_off(i->dest.v.tmp_id));
+        }
+        break;
+    }
+    case I_PrintStr: {
+        fprintf(f, "  mov rdi, [rbp-%d]\n", temp_off(i->l.v.tmp_id));
         fprintf(f, "  xor eax, eax\n");
         fprintf(f, "  call puts\n");
-    } else if (i->kind == I_Ret) {
+        break;
+    }
+    case I_Ret: {
         if (i->dest.kind == O_Const) fprintf(f, "  mov eax, %d\n", (int)i->dest.v.constant);
         else fprintf(f, "  mov eax, 0\n");
         fprintf(f, "  leave\n");
         fprintf(f, "  ret\n");
+        break;
+    }
     }
 }
 
@@ -54,6 +81,15 @@ int codegen() {
         fprintf(stderr, "Failed to open %s\n", asm_path);
         return 1;
     }
+
+    fprintf(f, "SECTION .data\n");
+    for (size_t i = 0; i < ir.glb_count; ++i) {
+        if (ir.glbs[i].str_idx != -1)
+            fprintf(f, "%s: dq const_s%d\n", ir.glbs[i].name, ir.glbs[i].str_idx);
+        else
+            fprintf(f, "%s: dq %f\n", ir.glbs[i].name, ir.glbs[i].val);
+    }
+    fprintf(f, "\n");
 
     fprintf(f, "SECTION .rodata\n");
     for (size_t i = 0; i < pool.f_count; ++i)

@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
 
     lower_prog();
     dedup();
-    print_ir();
+    // print_ir();
     if (codegen() != 0) {
         printf("\nCode gen failed");
         return 3;

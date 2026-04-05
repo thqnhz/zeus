@@ -171,7 +171,7 @@ typedef struct IRProg {
     IRFn *fns;
     size_t count;
     size_t cap;
-    struct { char *name; float val; } *glbs;
+    struct { char *name; float val; int str_idx; } *glbs;
     size_t glb_count;
     size_t glb_cap;
 } IRProg;

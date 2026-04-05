@@ -1,4 +1,6 @@
+v str = "Hello, from Zeus!";
+
 f main() {
-    print("Hello, world!");
+    print(str);
 }
 
