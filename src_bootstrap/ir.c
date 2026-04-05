@@ -109,7 +109,7 @@ static void lower_stmt(Stmt *s) {
     case S_Print: {
         int is_str = s->v.print->kind == E_Str;
         if (!is_str && s->v.print->kind == E_V) {
-            for (size_t i = 0; i < prog.glb_count; ++i) {
+            for (size_t i = 0; i < ir.glb_count; ++i) {
                 if (strcmp(ir.glbs[i].name, s->v.print->v.var) == 0
                     && ir.glbs[i].str_idx != -1) {
                     is_str = 1;
