@@ -1,10 +1,12 @@
 #ifndef ZEUS_H
 #define ZEUS_H
 
+#include <unistd.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
 
 
 #define ANSI(c) ansi[c]

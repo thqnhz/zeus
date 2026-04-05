@@ -2,15 +2,6 @@
 
 
 
-static void get_dir(const char *path, char *dir, size_t size) {
-    // Find the right most slash
-    const char *slash = strrchr(path, '/');
-    if (slash) {
-        size_t len = slash - path;
-        snprintf(dir, size, "%.*s", (int)len, path);
-    } else snprintf(dir, size, ".");
-}
-
 static int temp_off(int id) { return (id + 1) * 8; }
 
 static void emit_inst(FILE *f, IRInst *i) {
@@ -66,19 +57,46 @@ static void emit_fn(FILE *f, IRFn *fn) {
     fprintf(f, "\n");
 }
 
+char *dir;
+char *asm_path;
+char *obj_path;
+char *exe_path;
+
+static void cleanup() {
+    free(dir);
+    free(asm_path);
+    free(obj_path);
+    free(exe_path);
+}
+
+static int run_cmd(const char *cmd, char *const argv[]) {
+    pid_t pid = fork();
+    if (pid < 0) return 1;
+    if (pid == 0) {
+        execvp(cmd, argv);
+        _exit(1);
+    }
+    int status;
+    waitpid(pid, &status, 0);
+    if (WIFEXITED(status) && WEXITSTATUS(status) == 0) return 0;
+    return 1;
+}
+
 int codegen() {
-    char dir[512];
-    get_dir(source_path, dir, sizeof(dir));
-    char asm_path[512];
-    char obj_path[512];
-    char exe_path[512];
-    snprintf(asm_path, sizeof(asm_path), "%s/out.asm", dir);
-    snprintf(obj_path, sizeof(obj_path), "%s/out.o", dir);
-    snprintf(exe_path, sizeof(exe_path), "%s/out", dir);
+    // Find the right most slash
+    const char *slash = strrchr(source_path, '/');
+    if (slash) {
+        asprintf(&dir, "%.*s", (int)(slash - source_path), source_path);
+    } else asprintf(&dir, ".");
+
+    asprintf(&asm_path, "%s/out.asm", dir);
+    asprintf(&obj_path, "%s/out.o", dir);
+    asprintf(&exe_path, "%s/out", dir);
 
     FILE *f = fopen(asm_path, "w");
     if (!f) {
         fprintf(stderr, "Failed to open %s\n", asm_path);
+        cleanup();
         return 1;
     }
 
@@ -108,11 +126,19 @@ int codegen() {
 
     fclose(f);
 
-    char cmd[1024];
-    snprintf(cmd, sizeof(cmd), "nasm -felf64 -o %s %s", obj_path, asm_path);
-    if (system(cmd) != 0) return 1;
-    snprintf(cmd, sizeof(cmd), "gcc -no-pie -o %s %s", exe_path, obj_path);
-    if (system(cmd) != 0) return 1;
+    char *nasm[] = { "nasm", "-felf64", "-o", obj_path, asm_path, NULL };
+    if (run_cmd("nasm", nasm) != 0) {
+        cleanup();
+        return 1;
+    }
+
+    char *gcc[] = { "gcc", "-no-pie", "-o", exe_path, obj_path, NULL };
+    if (run_cmd("gcc", gcc) != 0) {
+        cleanup();
+        return 1;
+    }
+
+    cleanup();
     return 0;
 }
 
