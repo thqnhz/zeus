@@ -3,7 +3,8 @@
 
 
 static void get_dir(const char *path, char *dir, size_t size) {
-    const char *slash = strchr(path, '/');
+    // Find the right most slash
+    const char *slash = strrchr(path, '/');
     if (slash) {
         size_t len = slash - path;
         snprintf(dir, size, "%.*s", (int)len, path);
@@ -38,7 +39,7 @@ static void emit_fn(FILE *f, IRFn *fn) {
     fprintf(f, "\n");
 }
 
-void codegen() {
+int codegen() {
     char dir[512];
     get_dir(source_path, dir, sizeof(dir));
     char asm_path[512];
@@ -49,6 +50,10 @@ void codegen() {
     snprintf(exe_path, sizeof(exe_path), "%s/out", dir);
 
     FILE *f = fopen(asm_path, "w");
+    if (!f) {
+        fprintf(stderr, "Failed to open %s\n", asm_path);
+        return 1;
+    }
 
     fprintf(f, "SECTION .rodata\n");
     for (size_t i = 0; i < pool.f_count; ++i)
@@ -69,8 +74,9 @@ void codegen() {
 
     char cmd[1024];
     snprintf(cmd, sizeof(cmd), "nasm -felf64 -o %s %s", obj_path, asm_path);
-    if (system(cmd) != 0) return;
+    if (system(cmd) != 0) return 1;
     snprintf(cmd, sizeof(cmd), "gcc -no-pie -o %s %s", exe_path, obj_path);
-    if (system(cmd) != 0) return;
+    if (system(cmd) != 0) return 1;
+    return 0;
 }
 

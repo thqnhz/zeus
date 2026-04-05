@@ -3,7 +3,7 @@
 
 static Token peek() {
     if (tokens.pos < tokens.size) return tokens.tokens[tokens.pos];
-    return (Token){ TT_Ill, "", .v.nil = NULL, 0, 0 };
+    return (Token){ TT_Ill, "", 0, 0 };
 }
 
 static Token advance_token() {
@@ -40,9 +40,9 @@ static Token expect(TT type, const char *msg) {
     return advance_token();
 }
 
-static inline Expr *new_expr() { return calloc(1, sizeof(Expr)); }
+static Expr *new_expr() { return calloc(1, sizeof(Expr)); }
 
-static inline Stmt *new_stmt() { return calloc(1, sizeof(Stmt)); }
+static Stmt *new_stmt() { return calloc(1, sizeof(Stmt)); }
 
 static Expr *parse_expr();
 
@@ -150,7 +150,6 @@ static Expr *parse_expr() {
 }
 
 static Stmt *parse_stmt() {
-
     Stmt *s = new_stmt();
     if (match_kw("v")) {
         Token name = expect(TT_Id, "expected variable name");

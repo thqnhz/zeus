@@ -3,19 +3,19 @@
 
 
 
-static inline IROp op_const(float v) {
+static IROp op_const(float v) {
     return (IROp){ O_Const, .v.constant = v };
 }
 
-static inline IROp op_str(const char *s) {
+static IROp op_str(const char *s) {
     return (IROp){ O_Str, .v.str = strdup(s) };
 }
 
-static inline IROp op_tmp(int id) {
+static IROp op_tmp(int id) {
     return (IROp){ O_Tmp, .v.tmp_id = id };
 }
 
-static inline IROp op_var(const char *name) {
+static IROp op_var(const char *name) {
     return (IROp){ O_Var, .v.name = strdup(name) };
 }
 
@@ -32,7 +32,7 @@ static void emit(IRKind kind, IROp dst, IROp lhs, IROp rhs) {
     };
 }
 
-static inline int new_tmp() {
+static int new_tmp() {
     return curr_fn->next_tmp++;
 }
 
@@ -150,7 +150,7 @@ static void lower_fn(Fn *f) {
     }
 }
 
-static void print_ir() {
+void print_ir() {
     for (size_t i = 0; i < ir.count; i++) {
         IRFn *f = &ir.fns[i];
         printf("FUNC %s(%s)\n", f->name, f->param ? f->param : "");

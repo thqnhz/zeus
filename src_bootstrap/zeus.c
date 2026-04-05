@@ -10,7 +10,7 @@ IRFn *curr_fn = NULL;
 ConstPool pool = {0};
 
 char *src;
-static inline int readfile() {
+static int readfile() {
     FILE *f = fopen(source_path, "rb");
     if (!f) return 1;
     fseek(f, 0, SEEK_END);
@@ -65,8 +65,11 @@ int main(int argc, char **argv) {
 
     lower_prog();
     dedup();
-    // print_ir();
-    codegen();
+    print_ir();
+    if (codegen() != 0) {
+        printf("\nCode gen failed");
+        return 3;
+    }
     return 0;
 }
 

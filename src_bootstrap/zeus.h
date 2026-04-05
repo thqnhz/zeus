@@ -56,11 +56,6 @@ typedef enum TT {
 typedef struct Token {
     TT type;
     const char *lexeme;
-    union {
-        float num;
-        char *content;
-        void *nil;
-    } v;
     int line;
     int col;
 } Token;
@@ -221,6 +216,7 @@ void dedup();
 int pool_float(float v);
 int pool_str(const char *s);
 
+void print_ir();
 
 //
 // codegen.c
@@ -228,7 +224,7 @@ int pool_str(const char *s);
 
 extern const char *source_path;
 
-void codegen();
+int codegen();
 
 //
 // zeus.c

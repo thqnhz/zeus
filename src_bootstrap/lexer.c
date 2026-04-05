@@ -5,7 +5,7 @@ static int cursor = 0;
 static int line = 1;
 static int col = 1;
 
-static inline void add_token_(TT type, const char *lexeme, int line, int col) {
+static void add_token_(TT type, const char *lexeme, int line, int col) {
     if (tokens.size >= tokens.cap) {
         tokens.cap = tokens.cap ? tokens.cap * 2 : 8;
         tokens.tokens = realloc(tokens.tokens, tokens.cap * sizeof(Token));
@@ -18,7 +18,7 @@ static inline void add_token_(TT type, const char *lexeme, int line, int col) {
     };
 }
 
-static inline void add_token(TT type, const char *lexeme) {
+static void add_token(TT type, const char *lexeme) {
     add_token_(type, lexeme, line, col);
 }
 
@@ -27,11 +27,11 @@ void advance() {
     col++;
 }
 
-static inline int is_number(char c) {
+static int is_number(char c) {
     return c >= '0' && c <= '9';
 }
 
-static inline int is_alpha(char c) {
+static int is_alpha(char c) {
     return (c >= 'a' && c <= 'z')
         || (c >= 'A' && c <= 'Z')
         || c == '_';
@@ -45,7 +45,7 @@ int tokenize() {
         switch (c) {
         case '\n':
             line++;
-            col = 0;
+            col = 1;
         case '\t':
         case '\r':
         case ' ':
@@ -93,10 +93,7 @@ int tokenize() {
             while (src[cursor] != '"' && src[cursor] != '\0') advance();
             advance();
             int len = cursor - start - 2;
-            char buf[len + 1];
-            memcpy(buf, src + start + 1, len);
-            buf[len] = '\0';
-            add_token_(TT_Str, strdup(buf), line, start_col);
+            add_token_(TT_Str, strndup(src + start + 1, len), line, start_col);
             continue;
         }
         default:
@@ -105,28 +102,24 @@ int tokenize() {
                 int start_col = col;
                 while (is_number(src[cursor])) advance();
                 int len = cursor - start;
-                char buf[len + 1];
-                memcpy(buf, src + start, len);
-                buf[len] = '\0';
-                add_token_(TT_Num, strdup(buf), line, start_col);
+                add_token_(TT_Num, strndup(src + start, len), line, start_col);
                 continue;
             } else if (is_alpha(c)) {
                 int start = cursor;
                 int start_col = col;
                 while (is_alpha(src[cursor])) advance();
                 int len = cursor - start;
-                char buf[len + 1];
-                memcpy(buf, src + start, len);
-                buf[len] = '\0';
-                add_token_(TT_Id, strdup(buf), line, start_col);
+                add_token_(TT_Id, strndup(src + start, len), line, start_col);
                 continue;
             } else {
-                add_token(TT_Ill, strdup(&c));
+                char s[2] = { c, '\0' };
+                add_token(TT_Ill, strdup(s));
                 e = 1;
             }
         }
         advance();
     }
+    free(src);
     return e;
 }
 
