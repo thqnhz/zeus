@@ -29,7 +29,7 @@ void error(Token t, const char *fmt, ...) {
     va_start(args, fmt);
     printf("%s:%u:%u: %s%serror:%s ",
             source_path, t.line, t.col,
-            ANSI(CRed), ANSI(FBold), ANSI(CReset));
+            CRed, FBold, CReset);
     vprintf(fmt, args);
     printf("\n");
     va_end(args);

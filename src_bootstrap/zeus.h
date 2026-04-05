@@ -9,8 +9,6 @@
 #include <sys/wait.h>
 
 
-#define ANSI(c) ansi[c]
-
 //
 // lexer.c
 //
@@ -198,16 +196,14 @@ typedef enum Ansi {
     FUnderline,
 } Ansi;
 
-static const char *ansi[] = {
-    [CReset]     = "\x1b[0m",
-    [CRed]       = "\x1b[31m",
-    [CGreen]     = "\x1b[32m",
-    [CYellow]    = "\x1b[33m",
-    [CBlue]      = "\x1b[34m",
+#define CReset     "\x1b[0m"
+#define CRed       "\x1b[31m"
+#define CGreen     "\x1b[32m"
+#define CYellow    "\x1b[33m"
+#define CBlue      "\x1b[34m"
 
-    [FBold]      = "\x1b[1m",
-    [FUnderline] = "\x1b[4m",
-};
+#define FBold      "\x1b[1m"
+#define FUnderline "\x1b[4m"
 
 extern IRProg ir;
 extern IRFn *curr_fn;
