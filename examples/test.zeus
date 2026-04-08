@@ -1,6 +1,4 @@
-v str = "Hello, from Zeus!";
-
 f main() {
-    print(str);
+    print(33 + 34 * 2 / 5);
 }
 

@@ -80,6 +80,12 @@ int tokenize() {
         case '-':
             add_token(TT_Minus, "-");
             break;
+        case '*':
+            add_token(TT_Star, "*");
+            break;
+        case '/':
+            add_token(TT_Slash, "/");
+            break;
         case '<':
             add_token(TT_Lt, "<");
             break;

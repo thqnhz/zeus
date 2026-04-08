@@ -28,6 +28,44 @@ static void emit_inst(FILE *f, IRInst *i) {
         }
         break;
     }
+    case I_LoadConst: {
+        int index = pool_float(i->l.v.constant);
+        fprintf(f, "  movsd xmm0, [rel const_f%d]\n", index);
+        fprintf(f, "  movsd [rbp-%d], xmm0\n", temp_off(i->dest.v.tmp_id));
+        break;
+    }
+    case I_Add: {
+        fprintf(f, "  movsd xmm0, [rbp-%d]\n", temp_off(i->l.v.tmp_id));
+        fprintf(f, "  addsd xmm0, [rbp-%d]\n", temp_off(i->r.v.tmp_id));
+        fprintf(f, "  movsd [rbp-%d], xmm0\n", temp_off(i->dest.v.tmp_id));
+        break;
+    }
+    case I_Sub: {
+        fprintf(f, "  movsd xmm0, [rbp-%d]\n", temp_off(i->l.v.tmp_id));
+        fprintf(f, "  subsd xmm0, [rbp-%d]\n", temp_off(i->r.v.tmp_id));
+        fprintf(f, "  movsd [rbp-%d], xmm0\n", temp_off(i->dest.v.tmp_id));
+        break;
+    }
+    case I_Mul: {
+        fprintf(f, "  movsd xmm0, [rbp-%d]\n", temp_off(i->l.v.tmp_id));
+        fprintf(f, "  mulsd xmm0, [rbp-%d]\n", temp_off(i->r.v.tmp_id));
+        fprintf(f, "  movsd [rbp-%d], xmm0\n", temp_off(i->dest.v.tmp_id));
+        break;
+    }
+    case I_Div: {
+        fprintf(f, "  movsd xmm0, [rbp-%d]\n", temp_off(i->l.v.tmp_id));
+        fprintf(f, "  divsd xmm0, [rbp-%d]\n", temp_off(i->r.v.tmp_id));
+        fprintf(f, "  movsd [rbp-%d], xmm0\n", temp_off(i->dest.v.tmp_id));
+        break;
+    }
+    case I_Print: {
+        fprintf(f, "  movsd xmm0, [rbp-%d]\n", temp_off(i->dest.v.tmp_id));
+        fprintf(f, "  mov rdi, fmt_float\n");
+        fprintf(f, "  movq rsi, xmm0\n");
+        fprintf(f, "  mov eax, 1\n");
+        fprintf(f, "  call printf\n");
+        break;
+    }
     case I_PrintStr: {
         fprintf(f, "  mov rdi, [rbp-%d]\n", temp_off(i->dest.v.tmp_id));
         fprintf(f, "  xor eax, eax\n");
@@ -36,7 +74,7 @@ static void emit_inst(FILE *f, IRInst *i) {
     }
     case I_Ret: {
         if (i->dest.kind == O_Const) fprintf(f, "  mov eax, %d\n", (int)i->dest.v.constant);
-        else fprintf(f, "  mov eax, 0\n");
+        else fprintf(f, "  xor eax, eax\n");
         fprintf(f, "  leave\n");
         fprintf(f, "  ret\n");
         break;
@@ -121,6 +159,7 @@ int codegen() {
 
     fprintf(f, "SECTION .text\n");
     fprintf(f, "  EXTERN puts\n");
+    fprintf(f, "  EXTERN printf\n");
     fprintf(f, "  global main\n\n");
 
     for (size_t i = 0; i < ir.count; ++i) emit_fn(f, &ir.fns[i]);
